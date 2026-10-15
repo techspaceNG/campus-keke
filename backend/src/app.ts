@@ -94,3 +94,11 @@ export function createApp(): Application {
 
   return app;
 }
+
+const defaultApp = createApp();
+
+module.exports = defaultApp;
+module.exports.default = defaultApp;
+module.exports.createApp = createApp;
+
+export default defaultApp;
