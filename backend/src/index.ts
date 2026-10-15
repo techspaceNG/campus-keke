@@ -26,4 +26,5 @@ const shutdown = async () => {
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
 
-export default server;
+export { app, server };
+export default app;

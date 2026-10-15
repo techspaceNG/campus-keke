@@ -1,5 +1,28 @@
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api/v1';
+function resolveApiUrl(endpoint: string): string {
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint.slice(1) : endpoint;
+
+  // 1. Server-side runtime (SSR / Server Components):
+  if (typeof window === 'undefined') {
+    // Injected by Vercel service binding on frontend service
+    const serviceUrl = process.env.BACKEND_SERVICE_URL;
+    if (serviceUrl) {
+      const baseWithPrefix = new URL('api/v1/', serviceUrl.endsWith('/') ? serviceUrl : `${serviceUrl}/`);
+      return new URL(cleanEndpoint, baseWithPrefix).toString();
+    }
+    const fallbackBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api/v1';
+    return `${fallbackBase.replace(/\/$/, '')}/${cleanEndpoint}`;
+  }
+
+  // 2. Client-side browser runtime:
+  // If an absolute URL is explicitly configured, use it
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return `${process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, '')}/${cleanEndpoint}`;
+  }
+
+  // When deployed under Vercel multi-service with rewrite /api/(.*) -> backend,
+  // same-origin relative path /api/v1 routes automatically to the backend service.
+  return `/api/v1/${cleanEndpoint}`;
+}
 
 export interface ApiResponse<T = any> {
   success: boolean;
@@ -50,7 +73,7 @@ export async function apiRequest<T = any>(
   options: RequestInit = {}
 ): Promise<ApiResponse<T>> {
   const token = getStoredAccessToken();
-  const url = `${API_BASE_URL}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
+  const url = resolveApiUrl(endpoint);
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',

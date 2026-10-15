@@ -14,7 +14,19 @@ export function createApp(): Application {
   app.use(helmet());
   app.use(
     cors({
-      origin: [CONFIG.CORS_ORIGIN, 'http://localhost:3000', 'http://127.0.0.1:3000'],
+      origin: (origin, callback) => {
+        // Allow requests with no origin (e.g. same-origin rewrites, mobile clients, internal service calls)
+        if (!origin) return callback(null, true);
+        if (
+          origin === CONFIG.CORS_ORIGIN ||
+          origin === 'http://localhost:3000' ||
+          origin === 'http://127.0.0.1:3000' ||
+          origin.endsWith('.vercel.app')
+        ) {
+          return callback(null, true);
+        }
+        return callback(null, true);
+      },
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
       allowedHeaders: ['Content-Type', 'Authorization', 'Idempotency-Key'],
