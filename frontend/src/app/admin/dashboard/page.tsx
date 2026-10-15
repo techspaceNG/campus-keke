@@ -31,6 +31,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Filter,
+  Printer,
+  Edit2,
+  Trash2,
 } from 'lucide-react';
 
 export default function AdminDashboard() {
@@ -52,6 +55,7 @@ export default function AdminDashboard() {
   const [transactions, setTransactions] = useState<any[]>([]);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [failedScans, setFailedScans] = useState<any[]>([]);
+  const [vehicles, setVehicles] = useState<any[]>([]);
 
   // Search filter
   const [searchTerm, setSearchTerm] = useState('');
@@ -147,6 +151,32 @@ export default function AdminDashboard() {
   const [showCreateDriverModal, setShowCreateDriverModal] = useState(false);
   const [showCreateVehicleModal, setShowCreateVehicleModal] = useState(false);
   const [selectedTicketForQr, setSelectedTicketForQr] = useState<any | null>(null);
+  const [ticketToPrint, setTicketToPrint] = useState<{ ticket: any; sale?: any } | null>(null);
+
+  // Edit Driver States
+  const [showEditDriverModal, setShowEditDriverModal] = useState(false);
+  const [editingDriver, setEditingDriver] = useState<any | null>(null);
+  const [editDriverForm, setEditDriverForm] = useState({
+    fullName: '',
+    phone: '',
+    driverCode: '',
+    licenseNumber: '',
+    status: 'ACTIVE',
+    assignedVehicleId: '',
+    password: '',
+  });
+  const [submittingEditDriver, setSubmittingEditDriver] = useState(false);
+
+  // Edit Student States
+  const [showEditStudentModal, setShowEditStudentModal] = useState(false);
+  const [editingStudent, setEditingStudent] = useState<any | null>(null);
+  const [editStudentForm, setEditStudentForm] = useState({
+    fullName: '',
+    phone: '',
+    regNumber: '',
+    password: '',
+  });
+  const [submittingEditStudent, setSubmittingEditStudent] = useState(false);
 
   // Form inputs
   const [saleForm, setSaleForm] = useState({
@@ -199,7 +229,7 @@ export default function AdminDashboard() {
       else setLoading(true);
       setError(null);
 
-      const [statsRes, studentsRes, driversRes, ticketsRes, txRes, auditRes, scanRes] =
+      const [statsRes, studentsRes, driversRes, ticketsRes, txRes, auditRes, scanRes, vehiclesRes] =
         await Promise.all([
           api.get('/admin/stats'),
           api.get(`/admin/students?page=${studentPage}&limit=${studentLimit}${studentSearch ? `&search=${encodeURIComponent(studentSearch)}` : ''}`),
@@ -208,9 +238,13 @@ export default function AdminDashboard() {
           api.get(`/admin/transactions?page=${txPage}&limit=${txLimit}${txSearch ? `&search=${encodeURIComponent(txSearch)}` : ''}${txMethodFilter !== 'ALL' ? `&validationMethod=${txMethodFilter}` : ''}${txSourceFilter !== 'ALL' ? `&rideSource=${txSourceFilter}` : ''}`),
           api.get(`/admin/audit-logs?page=${auditPage}&limit=${auditLimit}${auditSearch ? `&search=${encodeURIComponent(auditSearch)}` : ''}${auditActionFilter !== 'ALL' ? `&action=${auditActionFilter}` : ''}`),
           api.get(`/admin/failed-scans?page=${scanPage}&limit=${scanLimit}${scanSearch ? `&search=${encodeURIComponent(scanSearch)}` : ''}${scanReasonFilter !== 'ALL' ? `&reason=${scanReasonFilter}` : ''}`),
+          api.get('/admin/vehicles').catch(() => ({ data: [] })),
         ]);
 
       setStats(statsRes.data.overview);
+      if (vehiclesRes?.data) {
+        setVehicles(Array.isArray(vehiclesRes.data) ? vehiclesRes.data : (vehiclesRes.data.data || []));
+      }
       if (studentsRes.data) {
         setStudents(Array.isArray(studentsRes.data) ? studentsRes.data : (studentsRes.data.data || []));
         if (studentsRes.data.pagination) setStudentPagination(studentsRes.data.pagination);
@@ -683,7 +717,17 @@ export default function AdminDashboard() {
       const res = await api.post('/tickets/sell', saleForm);
       showNotification(`Ticket ${res.data.ticket.ticketNumber} sold successfully!`);
       setShowCreateSaleModal(false);
-      setSelectedTicketForQr(res.data.ticket);
+      setTicketToPrint({
+        ticket: res.data.ticket,
+        sale: res.data.sale || {
+          amount: saleForm.amount,
+          paymentMethod: saleForm.paymentMethod,
+          buyerName: saleForm.buyerName,
+          buyerRegNumber: saleForm.buyerRegNumber,
+          buyerPhone: saleForm.buyerPhone,
+          soldAt: new Date().toISOString(),
+        },
+      });
       setSaleForm({
         totalRides: 10,
         amount: 1500,
@@ -921,6 +965,128 @@ export default function AdminDashboard() {
       fetchAllData(true);
     } catch (err: any) {
       alert(err.message || 'Failed to update driver status');
+    }
+  };
+
+  // Edit Driver Handlers
+  const openEditDriverModal = (driver: any) => {
+    setEditingDriver(driver);
+    setEditDriverForm({
+      fullName: driver.fullName || '',
+      phone: driver.phone || '',
+      driverCode: driver.driverCode || '',
+      licenseNumber: driver.licenseNumber || '',
+      status: driver.status || 'ACTIVE',
+      assignedVehicleId: driver.assignedVehicleId || '',
+      password: '',
+    });
+    setShowEditDriverModal(true);
+  };
+
+  const handleEditDriverSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingDriver) return;
+    try {
+      setSubmittingEditDriver(true);
+      const payload: any = {
+        fullName: editDriverForm.fullName.trim(),
+        phone: editDriverForm.phone.trim(),
+        driverCode: editDriverForm.driverCode.trim().toUpperCase(),
+        licenseNumber: editDriverForm.licenseNumber.trim(),
+        status: editDriverForm.status,
+        assignedVehicleId: editDriverForm.assignedVehicleId || null,
+      };
+      if (editDriverForm.password && editDriverForm.password.trim().length >= 6) {
+        payload.password = editDriverForm.password.trim();
+      }
+      await api.patch(`/admin/drivers/${editingDriver.id}`, payload);
+      showNotification(`Driver "${payload.driverCode}" updated successfully!`);
+      setShowEditDriverModal(false);
+      setEditingDriver(null);
+      fetchAllData(true);
+    } catch (err: any) {
+      alert(err.message || 'Failed to update driver');
+    } finally {
+      setSubmittingEditDriver(false);
+    }
+  };
+
+  const handleDeleteDriver = async (driverId: string, driverCode: string) => {
+    const confirmed = window.confirm(
+      `Are you sure you want to delete Driver "${driverCode}"?\n\nThis will permanently delete the driver account, license records, and unassign any vehicle.`
+    );
+    if (!confirmed) return;
+    try {
+      await api.delete(`/admin/drivers/${driverId}`);
+      showNotification(`Driver "${driverCode}" deleted successfully.`);
+      fetchAllData(true);
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete driver');
+    }
+  };
+
+  // Edit Student Handlers
+  const openEditStudentModal = (student: any) => {
+    setEditingStudent(student);
+    setEditStudentForm({
+      fullName: student.fullName || '',
+      phone: student.phone || '',
+      regNumber: student.regNumber || '',
+      password: '',
+    });
+    setShowEditStudentModal(true);
+  };
+
+  const handleEditStudentSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingStudent) return;
+    try {
+      setSubmittingEditStudent(true);
+      const payload: any = {
+        fullName: editStudentForm.fullName.trim(),
+        phone: editStudentForm.phone.trim(),
+        regNumber: editStudentForm.regNumber.trim().toUpperCase(),
+      };
+      if (editStudentForm.password && editStudentForm.password.trim().length >= 6) {
+        payload.password = editStudentForm.password.trim();
+      }
+      await api.patch(`/admin/students/${editingStudent.id}`, payload);
+      showNotification(`Student "${payload.regNumber}" updated successfully!`);
+      setShowEditStudentModal(false);
+      setEditingStudent(null);
+      fetchAllData(true);
+    } catch (err: any) {
+      alert(err.message || 'Failed to update student');
+    } finally {
+      setSubmittingEditStudent(false);
+    }
+  };
+
+  const handleDeleteStudent = async (studentId: string, regNumber: string) => {
+    const confirmed = window.confirm(
+      `Are you sure you want to delete Student "${regNumber}"?\n\nThis will remove their student account profile and unassign active tickets.`
+    );
+    if (!confirmed) return;
+    try {
+      await api.delete(`/admin/students/${studentId}`);
+      showNotification(`Student "${regNumber}" deleted successfully.`);
+      fetchAllData(true);
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete student');
+    }
+  };
+
+  const handleDeleteVehicle = async (vehicleId: string, kekeNumber: string) => {
+    const confirmed = window.confirm(
+      `Are you sure you want to remove Keke "${kekeNumber}" from the campus fleet?`
+    );
+    if (!confirmed) return;
+    try {
+      await api.delete(`/admin/vehicles/${vehicleId}`);
+      showNotification(`Vehicle "${kekeNumber}" removed from fleet.`);
+      fetchAllData(true);
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete vehicle');
     }
   };
 
@@ -1474,6 +1640,13 @@ export default function AdminDashboard() {
                           >
                             <Eye className="w-3.5 h-3.5" />
                           </button>
+                          <button
+                            onClick={() => setTicketToPrint({ ticket: t, sale: t.sales?.[0] })}
+                            title="Print Ticket Slip / Receipt"
+                            className="p-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-semibold transition-colors"
+                          >
+                            <Printer className="w-3.5 h-3.5" />
+                          </button>
                           {(t.status === 'EXHAUSTED' || t.remainingRides === 0 || t.ticketType === 'DRIVER_EMERGENCY') && (
                             <button
                               onClick={() => openRefillModalForTicket(t)}
@@ -1792,6 +1965,7 @@ export default function AdminDashboard() {
                       <th className="py-3 px-3">Balance</th>
                       <th className="py-3 px-3">Total Rides Taken</th>
                       <th className="py-3 px-3">Registered On</th>
+                      <th className="py-3 px-3 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -1814,13 +1988,31 @@ export default function AdminDashboard() {
                           <td className="py-3 px-3 text-slate-400">
                             {new Date(s.createdAt).toLocaleDateString()}
                           </td>
+                          <td className="py-3 px-3 text-right">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                onClick={() => openEditStudentModal(s)}
+                                title="Edit Student"
+                                className="p-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold transition-colors"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteStudent(s.id, s.regNumber)}
+                                title="Delete Student"
+                                className="p-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-semibold transition-colors"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
                         </tr>
                       );
                     })}
 
                     {students.length === 0 && (
                       <tr>
-                        <td colSpan={7} className="py-12 text-center">
+                        <td colSpan={8} className="py-12 text-center">
                           <Users className="w-8 h-8 text-slate-300 mx-auto mb-2" />
                           <p className="text-xs font-bold text-slate-700">No students match your query</p>
                           <p className="text-[11px] text-slate-400 mt-0.5">
@@ -2095,16 +2287,32 @@ export default function AdminDashboard() {
                           </td>
                           <td className="py-3 px-3 font-bold text-slate-800">{d._count?.rides || 0}</td>
                           <td className="py-3 px-3">
-                            <button
-                              onClick={() => toggleDriverStatus(d.id, d.status)}
-                              className={`px-2.5 py-1 rounded-xl text-[10px] font-bold transition-colors ${
-                                d.status === 'ACTIVE'
-                                  ? 'bg-rose-100 text-rose-800 hover:bg-rose-200'
-                                  : 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
-                              }`}
-                            >
-                              {d.status === 'ACTIVE' ? 'Suspend' : 'Activate'}
-                            </button>
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                onClick={() => toggleDriverStatus(d.id, d.status)}
+                                className={`px-2 py-1 rounded-xl text-[10px] font-bold transition-colors ${
+                                  d.status === 'ACTIVE'
+                                    ? 'bg-amber-100 text-amber-800 hover:bg-amber-200'
+                                    : 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
+                                }`}
+                              >
+                                {d.status === 'ACTIVE' ? 'Suspend' : 'Activate'}
+                              </button>
+                              <button
+                                onClick={() => openEditDriverModal(d)}
+                                title="Edit Driver Details"
+                                className="p-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold transition-colors"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteDriver(d.id, d.driverCode)}
+                                title="Delete Driver Account"
+                                className="p-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-semibold transition-colors"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -2193,6 +2401,74 @@ export default function AdminDashboard() {
                     </div>
                   </div>
                 )}
+              </div>
+
+              {/* Fleet Vehicles Card */}
+              <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-4">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                  <div>
+                    <h2 className="text-base font-bold text-slate-900">Campus Fleet Vehicles</h2>
+                    <p className="text-xs text-slate-500">Registered Keke tricycles, plate numbers, and assigned drivers</p>
+                  </div>
+                  <button
+                    onClick={() => setShowCreateVehicleModal(true)}
+                    className="px-4 py-2 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors"
+                  >
+                    + Register New Keke
+                  </button>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 text-slate-500 uppercase tracking-wider font-bold border-y border-slate-100">
+                      <tr>
+                        <th className="py-3 px-3">Keke #</th>
+                        <th className="py-3 px-3">Plate Number</th>
+                        <th className="py-3 px-3">Model</th>
+                        <th className="py-3 px-3">Capacity</th>
+                        <th className="py-3 px-3">Assigned Driver</th>
+                        <th className="py-3 px-3 text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {vehicles.map((v) => (
+                        <tr key={v.id} className="hover:bg-slate-50/50">
+                          <td className="py-3 px-3 font-mono font-bold text-slate-900">{v.kekeNumber}</td>
+                          <td className="py-3 px-3 font-mono font-bold text-slate-700">{v.plateNumber}</td>
+                          <td className="py-3 px-3 text-slate-600">{v.model || 'Bajaj RE 4S'}</td>
+                          <td className="py-3 px-3 text-slate-600">{v.capacity || 4} Passengers</td>
+                          <td className="py-3 px-3 font-semibold text-slate-900">
+                            {v.drivers && v.drivers.length > 0 ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                <Car className="w-3 h-3" />
+                                {v.drivers.map((d: any) => `${d.driverCode} - ${d.fullName}`).join(', ')}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 italic">Unassigned (Available)</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-3 text-right">
+                            <button
+                              onClick={() => handleDeleteVehicle(v.id, v.kekeNumber)}
+                              title="Remove Keke from Fleet"
+                              className="p-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-semibold transition-colors"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+
+                      {vehicles.length === 0 && (
+                        <tr>
+                          <td colSpan={6} className="py-8 text-center text-slate-400">
+                            No keke vehicles registered yet. Click "+ Register New Keke" above to add vehicles to your campus fleet.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           )}
@@ -3391,20 +3667,30 @@ export default function AdminDashboard() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Assign Keke Vehicle</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-slate-700 uppercase">Assign Keke Vehicle</label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowCreateDriverModal(false);
+                      setShowCreateVehicleModal(true);
+                    }}
+                    className="text-[11px] font-bold text-emerald-600 hover:text-emerald-700 underline"
+                  >
+                    + Register New Keke
+                  </button>
+                </div>
                 <select
                   value={driverForm.assignedVehicleId}
                   onChange={(e) => setDriverForm({ ...driverForm, assignedVehicleId: e.target.value })}
                   className="w-full px-3 py-2 border rounded-xl text-sm"
                 >
                   <option value="">-- Assign Later --</option>
-                  {drivers.map((d) =>
-                    d.assignedVehicle ? (
-                      <option key={d.assignedVehicle.id} value={d.assignedVehicle.id}>
-                        {d.assignedVehicle.kekeNumber} ({d.assignedVehicle.plateNumber})
-                      </option>
-                    ) : null
-                  )}
+                  {vehicles.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.kekeNumber} ({v.plateNumber}) {v.drivers?.length ? `• Assigned to ${v.drivers[0].driverCode}` : '• Available'}
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -3557,6 +3843,388 @@ export default function AdminDashboard() {
           </div>
         </div>
       )}
+
+      {/* MODAL: EDIT DRIVER */}
+      {showEditDriverModal && editingDriver && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-white rounded-3xl p-6 shadow-2xl border border-slate-200">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Edit Driver Details</h3>
+                <p className="text-xs text-slate-500">Update profile for {editingDriver.driverCode}</p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowEditDriverModal(false);
+                  setEditingDriver(null);
+                }}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleEditDriverSubmit} className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Driver Code *</label>
+                  <input
+                    type="text"
+                    required
+                    value={editDriverForm.driverCode}
+                    onChange={(e) => setEditDriverForm({ ...editDriverForm, driverCode: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-xl text-sm uppercase font-mono font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Full Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={editDriverForm.fullName}
+                    onChange={(e) => setEditDriverForm({ ...editDriverForm, fullName: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-xl text-sm"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Phone Number *</label>
+                  <input
+                    type="tel"
+                    required
+                    value={editDriverForm.phone}
+                    onChange={(e) => setEditDriverForm({ ...editDriverForm, phone: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-xl text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">License Number *</label>
+                  <input
+                    type="text"
+                    required
+                    value={editDriverForm.licenseNumber}
+                    onChange={(e) => setEditDriverForm({ ...editDriverForm, licenseNumber: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-xl text-sm font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Status</label>
+                  <select
+                    value={editDriverForm.status}
+                    onChange={(e) => setEditDriverForm({ ...editDriverForm, status: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-xl text-sm font-semibold"
+                  >
+                    <option value="ACTIVE">ACTIVE</option>
+                    <option value="SUSPENDED">SUSPENDED</option>
+                    <option value="INACTIVE">INACTIVE</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Assigned Keke</label>
+                  <select
+                    value={editDriverForm.assignedVehicleId}
+                    onChange={(e) => setEditDriverForm({ ...editDriverForm, assignedVehicleId: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-xl text-sm"
+                  >
+                    <option value="">-- No Vehicle --</option>
+                    {vehicles.map((v) => (
+                      <option key={v.id} value={v.id}>
+                        {v.kekeNumber} ({v.plateNumber})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                  Reset Password <span className="text-slate-400 font-normal lowercase">(leave blank to keep current)</span>
+                </label>
+                <input
+                  type="password"
+                  placeholder="Enter new password (optional)"
+                  value={editDriverForm.password}
+                  onChange={(e) => setEditDriverForm({ ...editDriverForm, password: e.target.value })}
+                  className="w-full px-3 py-2 border rounded-xl text-sm font-mono"
+                />
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEditDriverModal(false);
+                    setEditingDriver(null);
+                  }}
+                  className="w-1/2 py-2.5 rounded-xl border text-xs font-bold text-slate-600"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingEditDriver}
+                  className="w-1/2 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-md disabled:opacity-50"
+                >
+                  {submittingEditDriver ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: EDIT STUDENT */}
+      {showEditStudentModal && editingStudent && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-white rounded-3xl p-6 shadow-2xl border border-slate-200">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Edit Student Details</h3>
+                <p className="text-xs text-slate-500">Update registration for {editingStudent.regNumber}</p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowEditStudentModal(false);
+                  setEditingStudent(null);
+                }}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleEditStudentSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Registration / Matric Number *</label>
+                <input
+                  type="text"
+                  required
+                  value={editStudentForm.regNumber}
+                  onChange={(e) => setEditStudentForm({ ...editStudentForm, regNumber: e.target.value })}
+                  className="w-full px-3 py-2 border rounded-xl text-sm uppercase font-mono font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Full Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={editStudentForm.fullName}
+                  onChange={(e) => setEditStudentForm({ ...editStudentForm, fullName: e.target.value })}
+                  className="w-full px-3 py-2 border rounded-xl text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Phone Number *</label>
+                <input
+                  type="tel"
+                  required
+                  value={editStudentForm.phone}
+                  onChange={(e) => setEditStudentForm({ ...editStudentForm, phone: e.target.value })}
+                  className="w-full px-3 py-2 border rounded-xl text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                  Reset Password <span className="text-slate-400 font-normal lowercase">(leave blank to keep current)</span>
+                </label>
+                <input
+                  type="password"
+                  placeholder="Enter new password (optional)"
+                  value={editStudentForm.password}
+                  onChange={(e) => setEditStudentForm({ ...editStudentForm, password: e.target.value })}
+                  className="w-full px-3 py-2 border rounded-xl text-sm font-mono"
+                />
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEditStudentModal(false);
+                    setEditingStudent(null);
+                  }}
+                  className="w-1/2 py-2.5 rounded-xl border text-xs font-bold text-slate-600"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingEditStudent}
+                  className="w-1/2 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-md disabled:opacity-50"
+                >
+                  {submittingEditStudent ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: PRINT TICKET SLIP / RECEIPT */}
+      {ticketToPrint && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="w-full max-w-md bg-white rounded-3xl p-6 shadow-2xl border border-slate-200 my-8">
+            {/* Modal Controls (Hidden during print) */}
+            <div className="no-print flex items-center justify-between pb-4 mb-4 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <Printer className="w-5 h-5 text-emerald-600" />
+                <h3 className="text-base font-bold text-slate-900">Print Transit Ticket</h3>
+              </div>
+              <button
+                onClick={() => setTicketToPrint(null)}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Printable Area */}
+            <div
+              id="printable-ticket"
+              className="bg-white border-2 border-dashed border-slate-300 rounded-2xl p-5 text-center text-slate-900"
+            >
+              {/* Institution Header */}
+              <div className="border-b-2 border-dashed border-slate-200 pb-3 mb-3">
+                <div className="w-12 h-12 mx-auto mb-1 rounded-xl bg-emerald-600 flex items-center justify-center text-white font-black text-xl shadow-sm">
+                  FCET
+                </div>
+                <h4 className="text-xs font-black uppercase tracking-wider text-slate-900">
+                  Federal College of Education (Tech) Bichi
+                </h4>
+                <p className="text-[10px] uppercase font-bold text-emerald-700 tracking-wide mt-0.5">
+                  Campus Keke Transit Shuttle • Official Pass
+                </p>
+              </div>
+
+              {/* Ticket Identifier */}
+              <div className="mb-3">
+                <div className="text-[10px] text-slate-400 uppercase font-bold">Ticket Number</div>
+                <div className="text-base font-mono font-black text-slate-900 tracking-wider">
+                  {ticketToPrint.ticket.ticketNumber}
+                </div>
+                <div className="inline-block mt-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 uppercase">
+                  {ticketToPrint.ticket.status} • {ticketToPrint.ticket.remainingRides} of {ticketToPrint.ticket.totalRides} Rides Left
+                </div>
+              </div>
+
+              {/* QR Code */}
+              <div className="p-3 bg-white border border-slate-200 rounded-xl inline-block shadow-sm mb-3">
+                <QRCodeSVG
+                  value={ticketToPrint.ticket.qrPayload || ticketToPrint.ticket.ticketNumber}
+                  size={190}
+                  level="H"
+                  includeMargin={false}
+                />
+              </div>
+
+              {/* Passenger & Purchase Breakdown */}
+              <div className="text-left bg-slate-50 rounded-xl p-3 text-xs space-y-1.5 border border-slate-100 mb-3">
+                <div className="flex justify-between">
+                  <span className="text-slate-500 font-medium">Passenger:</span>
+                  <span className="font-bold text-slate-900">
+                    {ticketToPrint.sale?.buyerName || ticketToPrint.ticket.student?.fullName || 'Campus Commuter'}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500 font-medium">Reg / Matric #:</span>
+                  <span className="font-mono font-bold text-slate-800">
+                    {ticketToPrint.sale?.buyerRegNumber || ticketToPrint.ticket.student?.regNumber || 'Walk-in'}
+                  </span>
+                </div>
+                {(ticketToPrint.sale?.buyerPhone || ticketToPrint.ticket.student?.phone) && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-500 font-medium">Phone:</span>
+                    <span className="text-slate-700 font-medium">
+                      {ticketToPrint.sale?.buyerPhone || ticketToPrint.ticket.student?.phone}
+                    </span>
+                  </div>
+                )}
+                <div className="flex justify-between pt-1 border-t border-slate-200">
+                  <span className="text-slate-500 font-medium">Amount Paid:</span>
+                  <span className="font-bold text-emerald-700">
+                    ₦{(ticketToPrint.sale?.amount ?? ticketToPrint.ticket.totalRides * 150).toLocaleString()}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500 font-medium">Payment Mode:</span>
+                  <span className="font-semibold text-slate-700">
+                    {ticketToPrint.sale?.paymentMethod || 'CASH'}
+                  </span>
+                </div>
+                <div className="flex justify-between text-[10px] text-slate-400 pt-1 border-t border-slate-200">
+                  <span>Issued Date:</span>
+                  <span>
+                    {new Date(ticketToPrint.sale?.soldAt || ticketToPrint.ticket.createdAt || Date.now()).toLocaleString()}
+                  </span>
+                </div>
+              </div>
+
+              {/* Instructions */}
+              <p className="text-[9px] text-slate-400 uppercase font-semibold tracking-wider">
+                Present this QR code to the driver upon boarding • Non-transferable
+              </p>
+            </div>
+
+            {/* Print Action Buttons (Hidden during print) */}
+            <div className="no-print flex gap-3 pt-4">
+              <button
+                type="button"
+                onClick={() => setTicketToPrint(null)}
+                className="w-1/3 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors"
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="w-2/3 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md flex items-center justify-center gap-2 transition-colors"
+              >
+                <Printer className="w-4 h-4" />
+                <span>Print Ticket / Receipt</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Global Print Styles */}
+      <style jsx global>{`
+        @media print {
+          body * {
+            visibility: hidden !important;
+          }
+          #printable-ticket,
+          #printable-ticket * {
+            visibility: visible !important;
+          }
+          #printable-ticket {
+            position: fixed !important;
+            left: 50% !important;
+            top: 20px !important;
+            transform: translateX(-50%) !important;
+            width: 320px !important;
+            margin: 0 !important;
+            padding: 16px !important;
+            box-shadow: none !important;
+            border: 2px dashed #000 !important;
+            background: #fff !important;
+            color: #000 !important;
+            z-index: 99999 !important;
+          }
+          .no-print {
+            display: none !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }

@@ -37,6 +37,27 @@ export const createVehicleSchema = {
   }),
 };
 
+export const updateDriverSchema = {
+  body: z.object({
+    fullName: z.string().min(2).max(100).optional(),
+    phone: z.string().min(7).max(20).optional(),
+    driverCode: z.string().min(2).max(20).optional(),
+    licenseNumber: z.string().min(4).max(50).optional(),
+    status: z.enum(['ACTIVE', 'SUSPENDED', 'INACTIVE']).optional(),
+    assignedVehicleId: z.string().nullable().optional(),
+    password: z.string().min(6).max(100).optional(),
+  }),
+};
+
+export const updateStudentSchema = {
+  body: z.object({
+    fullName: z.string().min(2).max(100).optional(),
+    phone: z.string().min(7).max(20).optional(),
+    regNumber: z.string().min(3).max(30).optional(),
+    password: z.string().min(6).max(100).optional(),
+  }),
+};
+
 export class AdminController {
   static async getDashboardStats(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
@@ -238,6 +259,83 @@ export class AdminController {
       res.status(200).json({
         success: true,
         data: result,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async updateDriver(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const driver = await AdminService.updateDriver(req.user!.userId, String(req.params.id), req.body);
+      res.status(200).json({
+        success: true,
+        data: driver,
+        message: 'Driver details updated successfully.',
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async deleteDriver(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const result = await AdminService.deleteDriver(req.user!.userId, String(req.params.id));
+      res.status(200).json({
+        success: true,
+        data: result,
+        message: result.message,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async updateStudent(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const student = await AdminService.updateStudent(req.user!.userId, String(req.params.id), req.body);
+      res.status(200).json({
+        success: true,
+        data: student,
+        message: 'Student details updated successfully.',
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async deleteStudent(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const result = await AdminService.deleteStudent(req.user!.userId, String(req.params.id));
+      res.status(200).json({
+        success: true,
+        data: result,
+        message: result.message,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async listVehicles(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const vehicles = await AdminService.listVehicles();
+      res.status(200).json({
+        success: true,
+        data: vehicles,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async deleteVehicle(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const result = await AdminService.deleteVehicle(req.user!.userId, String(req.params.id));
+      res.status(200).json({
+        success: true,
+        data: result,
+        message: result.message,
       });
     } catch (error) {
       next(error);

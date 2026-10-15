@@ -364,6 +364,265 @@ export class AdminService {
   }
 
   /**
+   * List all vehicles in fleet
+   */
+  static async listVehicles() {
+    return prisma.vehicle.findMany({
+      include: {
+        drivers: {
+          select: {
+            id: true,
+            driverCode: true,
+            fullName: true,
+            phone: true,
+            status: true,
+          },
+        },
+      },
+      orderBy: { kekeNumber: 'asc' },
+    });
+  }
+
+  /**
+   * Delete Vehicle
+   */
+  static async deleteVehicle(adminId: string, vehicleId: string) {
+    const vehicle = await prisma.vehicle.findUnique({ where: { id: vehicleId } });
+    if (!vehicle) throw new NotFoundError('Vehicle not found');
+
+    await prisma.driver.updateMany({
+      where: { assignedVehicleId: vehicleId },
+      data: { assignedVehicleId: null },
+    });
+
+    await prisma.vehicle.delete({ where: { id: vehicleId } });
+
+    await createAuditLog({
+      userId: adminId,
+      action: 'VEHICLE_DELETED',
+      entityType: 'VEHICLE',
+      entityId: vehicleId,
+      details: { kekeNumber: vehicle.kekeNumber, plateNumber: vehicle.plateNumber },
+    });
+
+    return { success: true, message: `Vehicle ${vehicle.kekeNumber} deleted successfully.` };
+  }
+
+  /**
+   * Update driver profile details
+   */
+  static async updateDriver(adminId: string, driverId: string, data: {
+    fullName?: string;
+    phone?: string;
+    driverCode?: string;
+    licenseNumber?: string;
+    status?: keyof typeof DRIVER_STATUS;
+    assignedVehicleId?: string | null;
+    password?: string;
+  }) {
+    const driver = await prisma.driver.findUnique({
+      where: { id: driverId },
+      include: { user: true },
+    });
+    if (!driver) throw new NotFoundError('Driver not found');
+
+    if (data.driverCode && data.driverCode.toUpperCase() !== driver.driverCode) {
+      const conflict = await prisma.driver.findFirst({
+        where: { driverCode: data.driverCode.toUpperCase(), id: { not: driverId } },
+      });
+      if (conflict) throw new BadRequestError('Driver code already in use');
+    }
+    if (data.phone && data.phone !== driver.phone) {
+      const conflict = await prisma.driver.findFirst({
+        where: { phone: data.phone, id: { not: driverId } },
+      });
+      if (conflict) throw new BadRequestError('Phone number already in use');
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const userUpdates: any = {};
+      if (data.driverCode) {
+        userUpdates.username = data.driverCode.toUpperCase();
+      }
+      if (data.password && data.password.trim().length >= 6) {
+        userUpdates.passwordHash = await hashPassword(data.password.trim());
+      }
+      if (Object.keys(userUpdates).length > 0) {
+        await tx.user.update({
+          where: { id: driver.userId },
+          data: userUpdates,
+        });
+      }
+
+      return tx.driver.update({
+        where: { id: driverId },
+        data: {
+          fullName: data.fullName ?? driver.fullName,
+          phone: data.phone ?? driver.phone,
+          driverCode: data.driverCode ? data.driverCode.toUpperCase() : driver.driverCode,
+          licenseNumber: data.licenseNumber ?? driver.licenseNumber,
+          status: data.status ?? driver.status,
+          assignedVehicleId: data.assignedVehicleId !== undefined ? data.assignedVehicleId : driver.assignedVehicleId,
+        },
+        include: {
+          assignedVehicle: true,
+          user: { select: { id: true, username: true, role: true, isActive: true } },
+        },
+      });
+    });
+
+    await createAuditLog({
+      userId: adminId,
+      action: 'DRIVER_UPDATED',
+      entityType: 'DRIVER',
+      entityId: driverId,
+      details: { driverCode: updated.driverCode, fullName: updated.fullName },
+    });
+
+    return updated;
+  }
+
+  /**
+   * Delete driver account and clean up dependencies
+   */
+  static async deleteDriver(adminId: string, driverId: string) {
+    const driver = await prisma.driver.findUnique({
+      where: { id: driverId },
+      include: { user: true },
+    });
+    if (!driver) throw new NotFoundError('Driver not found');
+
+    await prisma.$transaction(async (tx) => {
+      await tx.failedScanLog.deleteMany({ where: { driverId } });
+
+      const emergencyTickets = await tx.ticket.findMany({ where: { driverId } });
+      for (const t of emergencyTickets) {
+        await tx.rideTransaction.deleteMany({ where: { ticketId: t.id } });
+        await tx.ticketSale.deleteMany({ where: { ticketId: t.id } });
+        await tx.ticketRefill.deleteMany({ where: { ticketId: t.id } });
+        await tx.ticket.delete({ where: { id: t.id } });
+      }
+
+      await tx.rideTransaction.deleteMany({ where: { driverId } });
+      await tx.driver.delete({ where: { id: driverId } });
+      await tx.user.delete({ where: { id: driver.userId } });
+    });
+
+    await createAuditLog({
+      userId: adminId,
+      action: 'DRIVER_DELETED',
+      entityType: 'DRIVER',
+      entityId: driverId,
+      details: { driverCode: driver.driverCode, fullName: driver.fullName },
+    });
+
+    return { success: true, message: `Driver ${driver.driverCode} deleted successfully.` };
+  }
+
+  /**
+   * Update student profile details
+   */
+  static async updateStudent(adminId: string, studentId: string, data: {
+    fullName?: string;
+    phone?: string;
+    regNumber?: string;
+    password?: string;
+  }) {
+    const student = await prisma.student.findUnique({
+      where: { id: studentId },
+      include: { user: true },
+    });
+    if (!student) throw new NotFoundError('Student not found');
+
+    if (data.regNumber && data.regNumber.toUpperCase() !== student.regNumber) {
+      const conflict = await prisma.student.findFirst({
+        where: { regNumber: data.regNumber.toUpperCase(), id: { not: studentId } },
+      });
+      if (conflict) throw new BadRequestError('Registration number already in use');
+    }
+    if (data.phone && data.phone !== student.phone) {
+      const conflict = await prisma.student.findFirst({
+        where: { phone: data.phone, id: { not: studentId } },
+      });
+      if (conflict) throw new BadRequestError('Phone number already in use');
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const userUpdates: any = {};
+      if (data.regNumber) {
+        userUpdates.username = data.regNumber.toUpperCase();
+      }
+      if (data.password && data.password.trim().length >= 6) {
+        userUpdates.passwordHash = await hashPassword(data.password.trim());
+      }
+      if (Object.keys(userUpdates).length > 0) {
+        await tx.user.update({
+          where: { id: student.userId },
+          data: userUpdates,
+        });
+      }
+
+      return tx.student.update({
+        where: { id: studentId },
+        data: {
+          fullName: data.fullName ?? student.fullName,
+          phone: data.phone ?? student.phone,
+          regNumber: data.regNumber ? data.regNumber.toUpperCase() : student.regNumber,
+        },
+        include: {
+          user: { select: { id: true, username: true, role: true, isActive: true } },
+          tickets: true,
+        },
+      });
+    });
+
+    await createAuditLog({
+      userId: adminId,
+      action: 'STUDENT_UPDATED',
+      entityType: 'STUDENT',
+      entityId: studentId,
+      details: { regNumber: updated.regNumber, fullName: updated.fullName },
+    });
+
+    return updated;
+  }
+
+  /**
+   * Delete student account and clean up dependencies
+   */
+  static async deleteStudent(adminId: string, studentId: string) {
+    const student = await prisma.student.findUnique({
+      where: { id: studentId },
+      include: { user: true },
+    });
+    if (!student) throw new NotFoundError('Student not found');
+
+    await prisma.$transaction(async (tx) => {
+      await tx.ticket.updateMany({
+        where: { studentId },
+        data: { studentId: null, status: 'REVOKED' },
+      });
+      await tx.rideTransaction.updateMany({
+        where: { studentId },
+        data: { studentId: null },
+      });
+
+      await tx.student.delete({ where: { id: studentId } });
+      await tx.user.delete({ where: { id: student.userId } });
+    });
+
+    await createAuditLog({
+      userId: adminId,
+      action: 'STUDENT_DELETED',
+      entityType: 'STUDENT',
+      entityId: studentId,
+      details: { regNumber: student.regNumber, fullName: student.fullName },
+    });
+
+    return { success: true, message: `Student ${student.regNumber} deleted successfully.` };
+  }
+
+  /**
    * List students with tickets and ride summary
    */
   static async listStudents(query: { search?: string; page?: number; limit?: number }) {
