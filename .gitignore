@@ -1,0 +1,30 @@
+node_modules/
+.next/
+dist/
+build/
+.env
+.env.local
+.env*.local
+*.env
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
+Thumbs.db
+
+# Database files
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+backend/prisma/*.db
+backend/prisma/*.db-journal
+backend/prisma/*.db-wal
+backend/prisma/*.db-shm
+
+# IDE & OS
+.vscode/
+.idea/
+*.swp
+*.swo

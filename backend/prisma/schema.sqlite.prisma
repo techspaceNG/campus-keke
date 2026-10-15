@@ -1,0 +1,223 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id             String         @id @default(uuid())
+  email          String?        @unique
+  username       String         @unique
+  passwordHash   String
+  role           String         @default("STUDENT")
+  isActive       Boolean        @default(true)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  student        Student?
+  driver         Driver?
+  issuedTickets  Ticket[]       @relation("TicketIssuer")
+  salesCreated   TicketSale[]   @relation("SalesAdmin")
+  refillsCreated TicketRefill[] @relation("RefillsAdmin")
+  auditLogs      AuditLog[]
+
+  @@index([role])
+  @@index([username])
+}
+
+model Student {
+  id        String            @id @default(uuid())
+  userId    String            @unique
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  regNumber String            @unique
+  fullName  String
+  phone     String            @unique
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  tickets   Ticket[]
+  rides     RideTransaction[]
+
+  @@index([regNumber])
+  @@index([phone])
+}
+
+model Driver {
+  id                String            @id @default(uuid())
+  userId            String            @unique
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  driverCode        String            @unique
+  fullName          String
+  phone             String
+  licenseNumber     String
+  status            String            @default("ACTIVE")
+  assignedVehicleId String?
+  assignedVehicle   Vehicle?          @relation(fields: [assignedVehicleId], references: [id])
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  emergencyTickets  Ticket[]          @relation("DriverEmergencyTickets")
+  rides             RideTransaction[]
+  failedScans       FailedScanLog[]
+
+  @@index([driverCode])
+  @@index([status])
+}
+
+model Vehicle {
+  id          String            @id @default(uuid())
+  plateNumber String            @unique
+  kekeNumber  String            @unique
+  model       String            @default("Bajaj RE 4S")
+  capacity    Int               @default(4)
+  status      String            @default("ACTIVE")
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  drivers     Driver[]
+  rides       RideTransaction[]
+
+  @@index([plateNumber])
+  @@index([kekeNumber])
+}
+
+model Ticket {
+  id             String            @id @default(uuid())
+  ticketNumber   String            @unique
+  qrPayload      String            @unique
+  totalRides     Int
+  usedRides      Int               @default(0)
+  remainingRides Int
+  status         String            @default("UNASSIGNED")
+  ticketType     String            @default("STUDENT")
+  
+  studentId      String?
+  student        Student?          @relation(fields: [studentId], references: [id])
+  
+  driverId       String?
+  driver         Driver?           @relation("DriverEmergencyTickets", fields: [driverId], references: [id])
+
+  issuedById     String
+  issuedBy       User              @relation("TicketIssuer", fields: [issuedById], references: [id])
+
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  expiresAt      DateTime?
+
+  sales          TicketSale[]
+  refills        TicketRefill[]
+  fundedRides    RideTransaction[]
+
+  @@index([ticketNumber])
+  @@index([qrPayload])
+  @@index([status])
+  @@index([studentId])
+  @@index([driverId])
+}
+
+model TicketSale {
+  id               String   @id @default(uuid())
+  ticketId         String
+  ticket           Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  adminId          String
+  admin            User     @relation("SalesAdmin", fields: [adminId], references: [id])
+  amount           Float
+  ridesPurchased   Int
+  paymentMethod    String   @default("CASH")
+  paymentReference String?
+  buyerName        String
+  buyerRegNumber   String?
+  buyerPhone       String?
+  soldAt           DateTime @default(now())
+  notes            String?
+
+  @@index([ticketId])
+  @@index([soldAt])
+  @@index([paymentMethod])
+}
+
+model TicketRefill {
+  id               String   @id @default(uuid())
+  ticketId         String
+  ticket           Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  adminId          String
+  admin            User     @relation("RefillsAdmin", fields: [adminId], references: [id])
+  ridesAdded       Int
+  previousBalance  Int
+  newBalance       Int
+  amountPaid       Float
+  paymentMethod    String   @default("CASH")
+  paymentReference String?
+  refilledAt       DateTime @default(now())
+  notes            String?
+
+  @@index([ticketId])
+  @@index([refilledAt])
+}
+
+model RideTransaction {
+  id                  String    @id @default(uuid())
+  transactionNumber   String    @unique
+  ticketId            String
+  ticket              Ticket    @relation(fields: [ticketId], references: [id])
+  studentId           String?
+  student             Student?  @relation(fields: [studentId], references: [id])
+  driverId            String
+  driver              Driver    @relation(fields: [driverId], references: [id])
+  vehicleId           String?
+  vehicle             Vehicle?  @relation(fields: [vehicleId], references: [id])
+  rideSource          String    @default("STUDENT_TICKET")
+  deductedRides       Int       @default(1)
+  remainingRidesAfter Int
+  validationMethod    String    @default("QR_SCAN")
+  idempotencyKey      String    @unique
+  status              String    @default("CONFIRMED")
+  timestamp           DateTime  @default(now())
+  ipAddress           String?
+  userAgent           String?
+
+  @@index([ticketId])
+  @@index([driverId])
+  @@index([studentId])
+  @@index([timestamp])
+  @@index([transactionNumber])
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id])
+  action     String
+  entityType String
+  entityId   String
+  details    String
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  @@index([action])
+  @@index([entityType])
+  @@index([createdAt])
+}
+
+model SystemSetting {
+  key         String   @id
+  value       String
+  description String?
+  updatedAt   DateTime @updatedAt
+}
+
+model FailedScanLog {
+  id              String   @id @default(uuid())
+  driverId        String?
+  driver          Driver?  @relation(fields: [driverId], references: [id])
+  attemptedTicket String
+  reason          String
+  ipAddress       String?
+  createdAt       DateTime @default(now())
+
+  @@index([attemptedTicket])
+  @@index([createdAt])
+}

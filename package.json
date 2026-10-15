@@ -1,0 +1,28 @@
+{
+  "name": "campus-keke",
+  "version": "1.0.0",
+  "description": "Campus Keke Ticket Management System - Next.js, Express, Prisma, PostgreSQL",
+  "private": true,
+  "scripts": {
+    "dev:backend": "npm run dev --prefix backend",
+    "dev:frontend": "npm run dev --prefix frontend",
+    "build:backend": "npm run build --prefix backend",
+    "build:frontend": "npm run build --prefix frontend",
+    "test": "npm run test --prefix backend",
+    "db:seed": "npm run prisma:seed --prefix backend",
+    "db:push": "npm run prisma:push --prefix backend"
+  },
+  "keywords": [
+    "campus-transit",
+    "keke",
+    "tricycle",
+    "ticket-management",
+    "qr-code",
+    "nextjs",
+    "express",
+    "prisma",
+    "postgresql"
+  ],
+  "author": "Campus Transit Engineering",
+  "license": "ISC"
+}
