@@ -6,6 +6,7 @@ export const standardRateLimiter = rateLimit({
   max: 300, // 300 requests per 15 min
   standardHeaders: true,
   legacyHeaders: false,
+  validate: false,
   message: {
     success: false,
     error: {
@@ -20,6 +21,7 @@ export const authRateLimiter = rateLimit({
   max: 20, // 20 attempts per 15 min
   standardHeaders: true,
   legacyHeaders: false,
+  validate: false,
   message: {
     success: false,
     error: {
@@ -34,6 +36,7 @@ export const ticketValidationRateLimiter = rateLimit({
   max: 60, // 60 scan/validation attempts per minute
   standardHeaders: true,
   legacyHeaders: false,
+  validate: false,
   message: {
     success: false,
     error: {

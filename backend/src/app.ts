@@ -10,6 +10,9 @@ import { errorHandler } from './middleware/errorHandler';
 export function createApp(): Application {
   const app = express();
 
+  // Trust reverse proxy (essential for Vercel, Render, Cloudflare, rate limiting)
+  app.set('trust proxy', 1);
+
   // Security Middleware
   app.use(helmet());
   app.use(
