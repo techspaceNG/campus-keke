@@ -5,9 +5,13 @@ export const metadata: Metadata = {
   title: 'Federal College of Education (Technical) Bichi - Campus Keke Service',
   description: 'Official Campus Tricycle Transit & Ticket Management System for Federal College of Education (Technical) Bichi. Simple. Fast. Campus rides.',
   icons: {
-    icon: '/logo.png',
-    shortcut: '/logo.png',
-    apple: '/logo.png',
+    icon: [
+      { url: '/favicon.ico' },
+      { url: '/icon.png', type: 'image/png' },
+      { url: '/logo.png', type: 'image/png' },
+    ],
+    shortcut: '/favicon.ico',
+    apple: '/icon.png',
   },
 };
 

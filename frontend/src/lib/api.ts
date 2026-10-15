@@ -90,11 +90,22 @@ export async function apiRequest<T = any>(
       headers,
     });
 
-    const data: ApiResponse<T> = await response.json().catch(() => ({
-      success: false,
-      data: null as any,
-      error: { message: `HTTP ${response.status}: Failed to parse server response` },
-    }));
+    let data: ApiResponse<T>;
+    const rawText = await response.text();
+    try {
+      data = JSON.parse(rawText);
+    } catch {
+      data = {
+        success: false,
+        data: null as any,
+        error: {
+          message:
+            response.status === 500
+              ? 'Backend connection failed (500). Please check that DATABASE_URL is added to your Vercel Project Settings.'
+              : `Server returned HTTP ${response.status}: Failed to parse response.`,
+        },
+      };
+    }
 
     if (!response.ok || !data.success) {
       const errorMsg = data.error?.message || `Request failed with status ${response.status}`;

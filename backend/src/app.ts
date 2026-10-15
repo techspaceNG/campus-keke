@@ -48,8 +48,21 @@ export function createApp(): Application {
   // Global Rate Limiting
   app.use(standardRateLimiter);
 
-  // Mount API Routes
+  // Health & diagnostics endpoint (accessible at any prefix)
+  app.get(['/health', '/api/health', '/api/v1/health', '/v1/health'], (req: Request, res: Response) => {
+    res.status(200).json({
+      status: 'UP',
+      timestamp: new Date().toISOString(),
+      service: 'campus-keke-backend',
+      hasDbUrl: Boolean(process.env.DATABASE_URL && !process.env.DATABASE_URL.startsWith('file:')),
+      env: process.env.NODE_ENV || 'production',
+    });
+  });
+
+  // Mount API Routes (support /api/v1, /v1, and / for all Vercel rewrite configurations)
   app.use('/api/v1', v1Router);
+  app.use('/v1', v1Router);
+  app.use('/', v1Router);
 
   // Fallback 404 handler
   app.use((req: Request, res: Response) => {
