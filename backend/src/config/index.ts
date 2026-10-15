@@ -1,10 +1,17 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
+const NEON_DEFAULT_URL =
+  'postgresql://neondb_owner:npg_fk0vR5HqKNEm@ep-flat-flower-b81jwutt-pooler.c-14.us-east-1.aws.neon.tech/neondb?channel_binding=require&sslmode=require';
+
+if (!process.env.DATABASE_URL || process.env.DATABASE_URL.startsWith('file:')) {
+  process.env.DATABASE_URL = NEON_DEFAULT_URL;
+}
+
 export const CONFIG = {
   PORT: parseInt(process.env.PORT || '5000', 10),
   NODE_ENV: process.env.NODE_ENV || 'development',
-  DATABASE_URL: process.env.DATABASE_URL || 'file:./dev.db',
+  DATABASE_URL: process.env.DATABASE_URL,
   JWT_ACCESS_SECRET: process.env.JWT_ACCESS_SECRET || 'campus_keke_access_token_secret_key_2026_prod_grade_xyz',
   JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET || 'campus_keke_refresh_token_secret_key_2026_prod_grade_abc',
   JWT_ACCESS_EXPIRES_IN: process.env.JWT_ACCESS_EXPIRES_IN || '2h',

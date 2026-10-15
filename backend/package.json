@@ -4,6 +4,7 @@
   "description": "Production-ready REST API for Campus Keke Ticket Management System",
   "main": "dist/index.js",
   "scripts": {
+    "postinstall": "prisma generate",
     "build": "prisma generate && tsc",
     "start": "node dist/index.js",
     "dev": "ts-node src/index.ts",

@@ -67,8 +67,9 @@ export function errorHandler(
   res.status(500).json({
     success: false,
     error: {
-      message: 'An internal server error occurred. Please contact system support.',
-      ...(isProduction ? {} : { stack: err.stack, raw: err.message }),
+      message: err?.message || 'An internal server error occurred.',
+      details: isProduction ? undefined : { stack: err.stack },
+      code: err?.code || 'INTERNAL_ERROR',
     },
   });
 }

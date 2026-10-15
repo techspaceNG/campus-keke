@@ -6,6 +6,7 @@ import { CONFIG } from './config';
 import v1Router from './routes';
 import { standardRateLimiter } from './middleware/rateLimiter';
 import { errorHandler } from './middleware/errorHandler';
+import { prisma } from './utils/prisma';
 
 export function createApp(): Application {
   const app = express();
@@ -49,12 +50,26 @@ export function createApp(): Application {
   app.use(standardRateLimiter);
 
   // Health & diagnostics endpoint (accessible at any prefix)
-  app.get(['/health', '/api/health', '/api/v1/health', '/v1/health'], (req: Request, res: Response) => {
+  app.get(['/health', '/api/health', '/api/v1/health', '/v1/health'], async (req: Request, res: Response) => {
+    let dbStatus = 'UNKNOWN';
+    let dbError: string | null = null;
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+      dbStatus = 'CONNECTED';
+    } catch (e: any) {
+      dbStatus = 'ERROR';
+      dbError = e.message;
+    }
+
     res.status(200).json({
       status: 'UP',
       timestamp: new Date().toISOString(),
       service: 'campus-keke-backend',
-      hasDbUrl: Boolean(process.env.DATABASE_URL && !process.env.DATABASE_URL.startsWith('file:')),
+      database: {
+        status: dbStatus,
+        hasDbUrl: Boolean(process.env.DATABASE_URL && !process.env.DATABASE_URL.startsWith('file:')),
+        error: dbError,
+      },
       env: process.env.NODE_ENV || 'production',
     });
   });

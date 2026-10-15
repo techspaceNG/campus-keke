@@ -101,7 +101,7 @@ export async function apiRequest<T = any>(
         error: {
           message:
             response.status === 500
-              ? 'Backend connection failed (500). Please check that DATABASE_URL is added to your Vercel Project Settings.'
+              ? 'Backend service error (500). Please verify Function Logs in Vercel or visit /api/health.'
               : `Server returned HTTP ${response.status}: Failed to parse response.`,
         },
       };
